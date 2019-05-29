@@ -59,7 +59,8 @@ class TS_Data(object):
         timestamps = self.timestamps[indices]
         sernum = self.sernum[indices]
 
-        return TS_Data(ts_data, context_data, timestamps, sernum)
+        # return TS_Data(ts_data, context_data, timestamps, sernum)
+        return ts_data
 
     def __next__(self):
         if self.index == self.N:

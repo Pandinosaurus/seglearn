@@ -13,7 +13,7 @@ from sklearn.utils.metaestimators import _BaseComposition
 
 from .base import TS_Data
 from .feature_functions import base_features
-from .util import get_ts_data_parts, check_ts_data
+from .util import get_ts_data_parts, check_ts_data, get_ts_parts
 
 __all__ = ['SegmentX', 'SegmentXY', 'SegmentXYForecast', 'PadTrunc', 'InterpLongToWide', 'Interp',
            'FeatureRep', 'FeatureRepMix', 'FunctionTransformer']
@@ -199,7 +199,8 @@ class SegmentX(BaseEstimator, XyTransformerMixin):
             expanded sample weights
         '''
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+
+        Xt, Xc, ts, sn = get_ts_parts(X)
         yt = y
         swt = sample_weight
 
@@ -212,18 +213,30 @@ class SegmentX(BaseEstimator, XyTransformerMixin):
             Xt = np.array([sliding_window(Xt[i], self.width, self._step, self.order)
                            for i in np.arange(N)])
 
-        Nt = [len(Xt[i]) for i in np.arange(len(Xt))]
+        Nt = [len(Xt[i]) for i in np.arange(N)] # how many segments in each series
+
+        if sn is not None:
+            sn = [np.full(Nt[i], sn[i]) for i in np.arange(N)]
+
+        if Xc is not None:
+            Xc = expand_variables_to_segments(Xc, Nt)
+
+        if ts is not None:
+            ts = np.array([sliding_window(ts[i], self.width, self._step, self.order)
+                           for i in np.arange(N)])
+            ts = np.concatenate(ts)
+            ts = middle(ts)
+
         Xt = np.concatenate(Xt)
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, ts, sn)
 
         if yt is not None:
             yt = expand_variables_to_segments(yt, Nt).ravel()
 
         if swt is not None:
             swt = expand_variables_to_segments(swt, Nt).ravel()
-
-        if Xc is not None:
-            Xc = expand_variables_to_segments(Xc, Nt)
-            Xt = TS_Data(Xt, Xc)
 
         if self.shuffle is True:
             check_random_state(self.random_state)
@@ -353,7 +366,7 @@ class SegmentXY(BaseEstimator, XyTransformerMixin):
 
         '''
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts, sn = get_ts_parts(X)
         yt = y
 
         N = len(Xt)  # number of time series
@@ -366,11 +379,23 @@ class SegmentXY(BaseEstimator, XyTransformerMixin):
                            for i in np.arange(N)])
 
         Nt = [len(Xt[i]) for i in np.arange(len(Xt))]
-        Xt = np.concatenate(Xt)
+
+        if sn is not None:
+            sn = [np.full(Nt[i], sn[i]) for i in np.arange(N)]
 
         if Xc is not None:
             Xc = expand_variables_to_segments(Xc, Nt)
-            Xt = TS_Data(Xt, Xc)
+
+        if ts is not None:
+            ts = np.array([sliding_window(ts[i], self.width, self._step, self.order)
+                           for i in np.arange(N)])
+            ts = np.concatenate(ts)
+            ts = self.y_func(ts)
+
+        Xt = np.concatenate(Xt)
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, ts, sn)
 
         if yt is not None:
             yt = np.array([sliding_window(yt[i], self.width, self._step, self.order)
@@ -506,12 +531,8 @@ class SegmentXYForecast(BaseEstimator, XyTransformerMixin):
 
         '''
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts, sn = get_ts_parts(X)
         yt = y
-
-        # if only one time series is learned
-        if len(Xt[0]) == 1:
-            Xt = [Xt]
 
         N = len(Xt)  # number of time series
 
@@ -523,14 +544,26 @@ class SegmentXYForecast(BaseEstimator, XyTransformerMixin):
                            for i in np.arange(N)])
 
         Nt = [len(Xt[i]) for i in np.arange(len(Xt))]
-        Xt = np.concatenate(Xt)
 
-        # todo: implement advance X
-        Xt = Xt[:, 0:self.width]
+        if sn is not None:
+            sn = [np.full(Nt[i], sn[i]) for i in np.arange(N)]
 
         if Xc is not None:
             Xc = expand_variables_to_segments(Xc, Nt)
-            Xt = TS_Data(Xt, Xc)
+
+        if ts is not None:
+            ts = np.array([sliding_window(ts[i], self.width + self.forecast, self._step, self.order)
+                           for i in np.arange(N)])
+            ts = np.concatenate(ts)
+            ts = ts[:, self.width:(self.width + self.forecast)]  # target y
+            ts = self.y_func(ts)
+
+        Xt = np.concatenate(Xt)
+        # todo: implement advance X
+        Xt = Xt[:, 0:self.width]
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, ts, sn)
 
         if yt is not None:
             yt = np.array([sliding_window(yt[i], self.width + self.forecast, self._step, self.order)
@@ -676,22 +709,25 @@ class PadTrunc(BaseEstimator, XyTransformerMixin):
 
         '''
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts, sn = get_ts_parts(X)
         yt = y
         swt = sample_weight
 
         Xt = self._mv_resize(Xt)
 
-        if Xc is not None:
-            Xt = TS_Data(Xt, Xc)
+        if ts is not None:
+            ts = self._mv_resize(ts)
 
-        if yt is not None and len(np.atleast_1d(yt[0])) > 1:
+        if yt is not None and len(np.atleast_1d(yt[0])) > 1: # todo: this will fail for one-hot y pr y strings
             # y is a time series
             yt = self._mv_resize(yt)
             swt = None
         elif yt is not None:
             # todo: is this needed?
             yt = np.array(yt)
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, ts, sn)
 
         return Xt, yt, swt
 
@@ -791,7 +827,7 @@ class Interp(BaseEstimator, XyTransformerMixin):
         D = Xt[0].shape[1] - 1  # number of data channels
 
         # 1st channel is time
-        t = [Xt[i][:, 0] for i in np.arange(N)]
+        t = [Xt[i][:, 0] for i in np.arange(N)] # todo: redo this
         t_lin = [np.arange(Xt[i][0, 0], Xt[i][-1, 0], self.sample_period) for i in np.arange(N)]
 
         if D == 1:
@@ -1117,12 +1153,17 @@ class FeatureRep(BaseEstimator, TransformerMixin):
 
         '''
         self._check_if_fitted()
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts, sn = get_ts_parts(X)
         check_array(Xt, dtype='numeric', ensure_2d=False, allow_nd=True)
 
         fts = np.column_stack([self.features[f](Xt) for f in self.features])
         if Xc is not None:
             fts = np.column_stack([fts, Xc])
+
+        # if isinstance(X, TS_Data):
+        #     return TS_Data(fts, None, ts, sn)
+        # else:
+        #     return fts
         return fts
 
     def _reset(self):
@@ -1168,7 +1209,7 @@ class FeatureRep(BaseEstimator, TransformerMixin):
         '''
         Generates string feature labels
         '''
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts, sn = get_ts_parts(X)
 
         ftr_sizes = self._check_features(self.features, Xt[0:3])
         f_labels = []

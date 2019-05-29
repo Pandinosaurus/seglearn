@@ -8,7 +8,7 @@ import numpy as np
 
 from seglearn.base import TS_Data
 
-__all__ = ['get_ts_data_parts', 'check_ts_data', 'check_ts_data_with_ts_target', 'ts_stats']
+__all__ = ['get_ts_data_parts', 'get_ts_parts', 'check_ts_data', 'check_ts_data_with_ts_target', 'ts_stats']
 
 def get_ts_data_parts(X):
     '''
@@ -31,6 +31,12 @@ def get_ts_data_parts(X):
     if not isinstance(X, TS_Data):
         return X, None
     return X.ts_data, X.context_data
+
+def get_ts_parts(X):
+    if isinstance(X, TS_Data):
+        return X.ts_data, X.context_data, X.timestamps, X.sernum
+    else:
+        return X, None, None, None
 
 
 def check_ts_data(X, y=None):

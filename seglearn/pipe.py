@@ -5,11 +5,14 @@ time series data and sequences using a sliding window segmentation
 # Author: David Burns
 # License: BSD
 
+import numpy as np
+# from six import iteritems
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
-from sklearn.externals import six
+
 
 from .transform import XyTransformerMixin
+from .base import TS_Data
 
 
 class Pype(Pipeline):
@@ -104,7 +107,8 @@ class Pype(Pipeline):
 
         fit_params_steps = dict((name, {}) for name, step in self.steps
                                 if step is not None)
-        for pname, pval in six.iteritems(fit_params):
+
+        for pname, pval in fit_params.items():
             step, param = pname.split('__', 1)
             fit_params_steps[step][param] = pval
 
@@ -131,14 +135,17 @@ class Pype(Pipeline):
         Xt = X
         yt = y
         swt = sample_weight
+        ts = None
 
         for name, transformer in self.steps[:-1]:  # iterate through all but last
             if isinstance(transformer, XyTransformerMixin):
                 Xt, yt, swt = transformer.transform(Xt, yt, swt)
+                if isinstance(Xt, TS_Data):
+                    ts = Xt.timestamps
             else:
                 Xt = transformer.transform(Xt)
 
-        return Xt, yt, swt
+        return Xt, yt, ts, swt
 
     def transform(self, X, y=None):
         """
@@ -161,7 +168,7 @@ class Pype(Pipeline):
         yt : array-like, shape = [n_samples]
             Transformed target
         """
-        Xt, yt, _ = self._transform(X, y)
+        Xt, yt, _, _ = self._transform(X, y)
 
         if isinstance(self._final_estimator, XyTransformerMixin):
             Xt, yt, _ = self._final_estimator.transform(Xt, yt)
@@ -228,8 +235,36 @@ class Pype(Pipeline):
         yp : array-like
             Predicted transformed target
         """
-        Xt, _, _ = self._transform(X)
+        Xt, _, _, _ = self._transform(X)
         return self._final_estimator.predict(Xt)
+
+    def predict_series(self, X):
+        Xt = X
+
+        if not isinstance(Xt, TS_Data):
+            Warning("Creating TS_Data object - inferring time stamps")
+            Xt = TS_Data(Xt)
+
+        Xt, _, ts, _ = self._transform(Xt)
+
+        if ts.ndim != 2:
+            raise Exception("timestamps not available for predict_series")
+
+        yp = self._final_estimator.predict(Xt)
+
+        y = []
+        t = []
+
+        for s in np.unique(ts[:, 0]): # todo: remove shuffle option from segmenters
+            idx = ts[:, 0] == s
+            ti = ts[idx, 1]
+            yi = yp[idx]
+            isx = np.argsort(ti)
+            y.append(yi[isx])
+            t.append(ti[isx])
+
+        return t, y
+
 
     def transform_predict(self, X, y):
         """
@@ -251,7 +286,7 @@ class Pype(Pipeline):
         yp : array-like
             Predicted transformed target
         """
-        Xt, yt, _ = self._transform(X, y)
+        Xt, yt, _, _ = self._transform(X, y)
         yp = self._final_estimator.predict(Xt)
         return yt, yp
 
@@ -276,7 +311,7 @@ class Pype(Pipeline):
         score : float
         """
 
-        Xt, yt, swt = self._transform(X, y, sample_weight)
+        Xt, yt, _, swt = self._transform(X, y, sample_weight)
 
         self.N_test = len(yt)
 
@@ -304,7 +339,7 @@ class Pype(Pipeline):
         y_proba : array-like, shape = [n_samples, n_classes]
             Predicted probability of each class
         """
-        Xt, _, _ = self._transform(X)
+        Xt, _, _, _ = self._transform(X)
         return self._final_estimator.predict_proba(Xt)
 
     def decision_function(self, X):
@@ -321,7 +356,7 @@ class Pype(Pipeline):
         -------
         y_score : array-like, shape = [n_samples, n_classes]
         """
-        Xt, _, _ = self._transform(X)
+        Xt, _, _, _ = self._transform(X)
         return self._final_estimator.decision_function(Xt)
 
     def predict_log_proba(self, X):
@@ -338,7 +373,7 @@ class Pype(Pipeline):
         -------
         y_score : array-like, shape = [n_samples, n_classes]
         """
-        Xt, _, _ = self._transform(X)
+        Xt, _, _, _ = self._transform(X)
         return self._final_estimator.predict_log_proba(Xt)
 
     def set_params(self, **params):

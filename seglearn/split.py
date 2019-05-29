@@ -16,11 +16,11 @@ splitting is still useful in certain cases such as for the analysis of a single 
 import numpy as np
 from sklearn.model_selection._split import _build_repr
 
-from .util import check_ts_data, get_ts_data_parts
+from .util import check_ts_data, get_ts_data_parts, get_ts_parts
 from .base import TS_Data
 
 
-class TemporalKFold(object):
+class TemporalKFold(object): # todo: fix for new TS_Data
     '''
     K-fold iterator variant for temporal splitting of time series data
 
@@ -158,7 +158,7 @@ def temporal_split(X, y, test_size=0.25):
 
     Ns = len(y)  # number of series
     check_ts_data(X, y)
-    Xt, Xc = get_ts_data_parts(X)
+    Xt, Xc, ts = get_ts_parts(X)
 
     train_size = 1. - test_size
 
@@ -168,9 +168,15 @@ def temporal_split(X, y, test_size=0.25):
     X_train = [Xt[i][train_ind[i]] for i in range(Ns)]
     X_test = [Xt[i][test_ind[i]] for i in range(Ns)]
 
-    if Xc is not None:
-        X_train = TS_Data(X_train, Xc)
-        X_test = TS_Data(X_test, Xc)
+    if ts is not None:
+        t_train = [ts[i][train_ind[i]] for i in range(Ns)]
+        t_test = [ts[i][test_ind[i]] for i in range(Ns)]
+    else:
+        t_train, t_test = None, None
+
+    if isinstance(X, TS_Data):
+        X_train = TS_Data(X_train, Xc, t_train)
+        X_test = TS_Data(X_test, Xc, t_test)
 
     if len(np.atleast_1d(y[0])) == len(Xt[0]):
         # y is a time series

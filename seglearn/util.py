@@ -34,9 +34,9 @@ def get_ts_data_parts(X):
 
 def get_ts_parts(X):
     if isinstance(X, TS_Data):
-        return X.ts_data, X.context_data, X.timestamps, X.sernum
+        return X.ts_data, X.context_data, X.timestamps
     else:
-        return X, None, None, None
+        return X, None, None
 
 
 def check_ts_data(X, y=None):

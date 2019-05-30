@@ -75,43 +75,36 @@ class TemporalKFold(object): # todo: fix for new TS_Data
         '''
 
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts = get_ts_parts(X)
         Ns = len(Xt)
-        Xt_new, y_new = self._ts_slice(Xt, y)
 
-        if Xc is not None:
-            Xc_new = np.concatenate([Xc] * self.n_splits)
-            X_new = TS_Data(Xt_new, Xc_new)
+        if ts is not None:
+            ts = self._split(ts)
+            # ts = np.array([ts[i] - ts[i][0]] for i in np.arange(len(ts))) # todo: zero base each series
+
+        if len(np.atleast_1d(y[0])) == len(Xt[0]): # y is a time series
+            yt = self._split(y)
         else:
-            X_new = np.array(Xt_new)
+            yt = np.concatenate([y for i in range(self.n_splits)]) # todo: improve
+
+        Xc = np.concatenate([Xc] * self.n_splits) if Xc is not None else None
+
+        Xt = self._split(Xt)
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, ts)
 
         cv = self._make_indices(Ns)
 
-        return X_new, y_new, cv
+        return Xt, yt, cv
 
-    def _ts_slice(self, Xt, y):
-        ''' takes time series data, and splits each series into temporal folds '''
-        Ns = len(Xt)
-        Xt_new = []
+    def _split(self, v):
+        v_new = []
         for i in range(self.n_splits):
-            for j in range(Ns):
-                Njs = int(len(Xt[j]) / self.n_splits)
-                Xt_new.append(Xt[j][(Njs * i):(Njs * (i + 1))])
-        Xt_new = np.array(Xt_new)
-
-        if len(np.atleast_1d(y[0])) == len(Xt[0]):
-            # y is a time series
-            y_new = []
-            for i in range(self.n_splits):
-                for j in range(Ns):
-                    Njs = int(len(y[j]) / self.n_splits)
-                    y_new.append(y[j][(Njs * i):(Njs * (i + 1))])
-            y_new = np.array(y_new)
-        else:
-            # y is contextual to each series
-            y_new = np.concatenate([y for i in range(self.n_splits)])
-
-        return Xt_new, y_new
+            for j in range(len(v)):
+                Njs = int(len(v[j]) / self.n_splits)
+                v_new.append(v[j][(Njs * i):(Njs * (i + 1))])
+        return np.array(v_new)
 
     def _make_indices(self, Ns):
         ''' makes indices for cross validation '''

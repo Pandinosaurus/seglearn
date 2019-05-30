@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 
 from .base import TS_Data
-from .util import get_ts_data_parts, check_ts_data_with_ts_target
+from .util import get_ts_data_parts, check_ts_data_with_ts_target, get_ts_parts
 from .transform import XyTransformerMixin, expand_variables_to_segments
 
 __all__ = ['TargetRunLengthEncoder']
@@ -90,24 +90,28 @@ class TargetRunLengthEncoder(BaseEstimator, XyTransformerMixin):
         '''
         check_ts_data_with_ts_target(X, y)
 
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts = get_ts_parts(X)
         N = len(Xt)  # number of time series
 
         # transformed data
         yt = []
+        tst = []
         Xtt = []
         swt = sample_weight
         Nt = []
 
         for i in range(N):
-            Xi, yi = self._transform(Xt[i], y[i])
+            Xi, yi, ti = self._transform(Xt[i], y[i], ts[i] if ts is not None else None)
             yt+=yi
             Xtt+=Xi
+            tst+=ti
             Nt.append(len(yi)) # number of contiguous class instances
 
         if Xc is not None:
-            Xct = expand_variables_to_segments(Xc, Nt)
-            Xtt = TS_Data(Xtt, Xct)
+            Xc = expand_variables_to_segments(Xc, Nt)
+
+        if isinstance(X, TS_Data):
+            Xtt = TS_Data(Xtt, Xc, tst)
 
         if sample_weight is not None:
             swt = expand_variables_to_segments(sample_weight, Nt)
@@ -140,21 +144,18 @@ class TargetRunLengthEncoder(BaseEstimator, XyTransformerMixin):
         p = np.cumsum(np.append(0, z))[:-1]  # positions
         return (z, p, ia[i])
 
-    def _transform(self, X, y):
+    def _transform(self, X, y, t):
         '''
         Transforms single series
         '''
         z, p, y_rle = self._rle(y)
         p = np.append(p, len(y))
         big_enough = p[1:] - p[:-1] >= self.min_length
-        Xt = []
-
-        for i in range(len(y_rle)):
-            if (big_enough[i]):
-                Xt.append(X[p[i]:p[i+1]])
-
+        N = len(y_rle)
+        Xt = [X[p[i]:p[i+1]] for i in np.arange(N) if big_enough[i]]
+        tt = [t[p[i]:p[i+1]] - t[p[i]] for i in np.arange(N) if big_enough[i]] if t is not None else []
         yt = y_rle[big_enough].tolist()
-        return Xt, yt
+        return Xt, yt, tt
 
 
 

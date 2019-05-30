@@ -42,12 +42,12 @@ pipe = Pype([('seg', SegmentXY(width=200, overlap=0.5, y_func=last)),
 pipe.fit(X_train, y_train)
 
 # Pype.predict_series() provides timestamps in addition to the predictions themselves
-tpt, ypt = pipe.predict_series(X_test)
+tp, yp = pipe.predict_series(X_test)
 
 # plot the sequence prediction
 plt.plot(X_train.timestamps[0], y_train[0], '.', label="train")
 plt.plot(X_test.timestamps[0], y_test[0], '.', label="test")
-plt.plot(tpt[0], ypt[0], label="predict")
+plt.plot(tp[0], yp[0], '.', label="predict")
 plt.xlabel("Time")
 plt.ylabel("Target")
 plt.legend()

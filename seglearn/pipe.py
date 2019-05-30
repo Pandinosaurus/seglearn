@@ -10,7 +10,6 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
-
 from .transform import XyTransformerMixin
 from .base import TS_Data
 
@@ -238,34 +237,6 @@ class Pype(Pipeline):
         Xt, _, _, _ = self._transform(X)
         return self._final_estimator.predict(Xt)
 
-    def predict_series(self, X):
-        Xt = X
-
-        if not isinstance(Xt, TS_Data):
-            Warning("Creating TS_Data object - inferring time stamps")
-            Xt = TS_Data(Xt)
-
-        Xt, _, ts, _ = self._transform(Xt)
-
-        if ts.ndim != 2:
-            raise Exception("timestamps not available for predict_series")
-
-        yp = self._final_estimator.predict(Xt)
-
-        y = []
-        t = []
-
-        for s in np.unique(ts[:, 0]): # todo: remove shuffle option from segmenters
-            idx = ts[:, 0] == s
-            ti = ts[idx, 1]
-            yi = yp[idx]
-            isx = np.argsort(ti)
-            y.append(yi[isx])
-            t.append(ti[isx])
-
-        return t, y
-
-
     def transform_predict(self, X, y):
         """
         Apply transforms to the data, and predict with the final estimator.
@@ -375,6 +346,67 @@ class Pype(Pipeline):
         """
         Xt, _, _, _ = self._transform(X)
         return self._final_estimator.predict_log_proba(Xt)
+
+    def predict_series(self, X):
+        Xt = X
+
+        if not isinstance(Xt, TS_Data):
+            Warning("Creating TS_Data object - inferring time stamps")
+            Xt = TS_Data(Xt)
+
+        Xt, _, ts, _ = self._transform(Xt)
+        yp = self._final_estimator.predict(Xt)
+        return self._to_series(ts, yp)
+
+    def predict_series_proba(self, X):
+        Xt = X
+
+        if not isinstance(Xt, TS_Data):
+            Warning("Creating TS_Data object - inferring time stamps")
+            Xt = TS_Data(Xt)
+
+        Xt, _, ts, _ = self._transform(Xt)
+        yp = self._final_estimator.predict_proba(Xt)
+        return self._to_series(ts, yp)
+
+    def predict_series_log_proba(self, X):
+        Xt = X
+
+        if not isinstance(Xt, TS_Data):
+            Warning("Creating TS_Data object - inferring time stamps")
+            Xt = TS_Data(Xt)
+
+        Xt, _, ts, _ = self._transform(Xt)
+        yp = self._final_estimator.predict_log_proba(Xt)
+        return self._to_series(ts, yp)
+
+    def decision_function_series(self, X):
+        Xt = X
+
+        if not isinstance(Xt, TS_Data):
+            Warning("Creating TS_Data object - inferring time stamps")
+            Xt = TS_Data(Xt)
+
+        Xt, _, ts, _ = self._transform(Xt)
+        yp = self._final_estimator.decision_function(Xt)
+        return self._to_series(ts, yp)
+
+    def _to_series(self, t, y):
+
+        if t.ndim != 2:
+            raise Exception("timestamps not available for predict_series")
+
+        ts, ys = [], []
+
+        for s in np.unique(t[:, 0]):  # todo: remove shuffle option from segmenters
+            idx = t[:, 0] == s
+            ti = t[idx, 1]
+            yi = y[idx]
+            isx = np.argsort(ti)
+            ys.append(yi[isx])
+            ts.append(ti[isx])
+
+        return ts, ys
 
     def set_params(self, **params):
         """

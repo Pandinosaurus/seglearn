@@ -631,7 +631,7 @@ def sliding_tensor(mv_time_series, width, step, order='F'):
     return np.stack(data, axis=2)
 
 
-class PadTrunc(BaseEstimator, XyTransformerMixin):
+class PadTrunc(BaseEstimator, XyTransformerMixin): # todo: this is problematic
     '''
     Transformer for using padding and truncation to enforce fixed length on all time
     series in the dataset. Series' longer than ``width`` are truncated to length ``width``.
@@ -645,18 +645,19 @@ class PadTrunc(BaseEstimator, XyTransformerMixin):
         width of segments (number of samples)
     '''
 
-    def __init__(self, width=100):
+    def __init__(self, width=100, X_fill = 0, tstep = 1): # todo: add sequence length as a parameter to Xc
         if not width >= 1:
             raise ValueError("width must be >= 1 (was %d)" % width)
         self.width = width
+        self.X_fill = X_fill
 
-    def _mv_resize(self, v):
+    def _mv_resize(self, v, fill_val=0):
         N = len(v)
         if v[0].ndim > 1:
             D = v[0].shape[1]
-            w = np.zeros((N, self.width, D))
+            w = np.full((N, self.width, D), fill_val, dtype=v[0].dtype)
         else:
-            w = np.zeros((N, self.width))
+            w = np.full((N, self.width), fill_val, dtype=v[0].dtype)
         for i in np.arange(N):
             Ni = min(self.width, len(v[i]))
             w[i, 0:Ni] = v[i][0:Ni]
@@ -710,7 +711,7 @@ class PadTrunc(BaseEstimator, XyTransformerMixin):
         yt = y
         swt = sample_weight
 
-        Xt = self._mv_resize(Xt)
+        Xt = self._mv_resize(Xt, self.X_fill)
 
         if ts is not None:
             ts = self._mv_resize(ts)

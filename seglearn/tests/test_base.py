@@ -8,7 +8,7 @@ from seglearn.datasets import load_watch
 from seglearn.base import TS_Data
 
 
-def test_ts_data():
+def test_ts_data(): # todo: test timestamps
     # time series data
     ts = np.array([np.random.rand(100, 10), np.random.rand(200, 10), np.random.rand(20, 10)])
     c = np.random.rand(3, 10)

@@ -796,7 +796,9 @@ class Interp(BaseEstimator, XyTransformerMixin):
         '''
         Transforms the time series data with linear direct value interpolation
         If y is a time series and passed, it will be transformed as well
-        The time dimension is removed from the data
+
+        If a TS_Data object is not passed, the 1st data column is considered
+        the time variable and is removed from the data
 
         Parameters
         ----------
@@ -817,24 +819,29 @@ class Interp(BaseEstimator, XyTransformerMixin):
             None is returned if target is changed. Otherwise it is returned unchanged.
         '''
         check_ts_data(X, y)
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, t = get_ts_parts(X)
         yt = y
         swt = sample_weight
 
         N = len(Xt)  # number of series
-        D = Xt[0].shape[1] - 1  # number of data channels
 
         # 1st channel is time
-        t = [Xt[i][:, 0] for i in np.arange(N)] # todo: redo this
-        t_lin = [np.arange(Xt[i][0, 0], Xt[i][-1, 0], self.sample_period) for i in np.arange(N)]
+        if t is None:
+            t = [Xt[i][:, 0] for i in np.arange(N)] # todo: redo this
+            Xt = [Xt[i][:, 1:] for i in np.arange(N)]
+
+        t_lin = [np.arange(t[i][0], t[i][-1], self.sample_period) for i in np.arange(N)]
+
+        D = Xt[0].shape[1]  # number of data channels
 
         if D == 1:
-            Xt = [self._interp(t_lin[i], t[i], Xt[i][:, 1], kind=self.kind) for i in np.arange(N)]
+            Xt = [self._interp(t_lin[i], t[i], Xt[i][:, 0], kind=self.kind) for i in np.arange(N)]
         elif D > 1:
             Xt = [np.column_stack([self._interp(t_lin[i], t[i], Xt[i][:, j], kind=self.kind)
-                                   for j in range(1, D + 1)]) for i in np.arange(N)]
-        if Xc is not None:
-            Xt = TS_Data(Xt, Xc)
+                                   for j in range(0, D)]) for i in np.arange(N)]
+
+        if isinstance(X, TS_Data):
+            Xt = TS_Data(Xt, Xc, t_lin)
 
         if yt is not None and len(np.atleast_1d(yt[0])) > 1:
             # y is a time series
@@ -978,14 +985,21 @@ class InterpLongToWide(BaseEstimator, XyTransformerMixin):
             None is returned if target is changed. Otherwise it is returned unchanged.
         '''
         check_ts_data(X, y)
-        xt, xc = get_ts_data_parts(X)
+        xt, xc, t = get_ts_parts(X)
         yt = y
         swt = sample_weight
+
+        N = len(xt) # todo: in progress
+        #
+        # # 1st channel is time
+        # if t is None:
+        #     t = [xt[i][:, 0] for i in np.arange(N)] # todo: redo this
+        #     Xt = [xt[i][:, 1:] for i in np.arange(N)]
 
         # number of data channels
         d = xt[0][0].shape[0] - 2
         # number of series
-        N = len(xt)
+
 
         # retrieve the unique identifiers
         s = np.unique(xt[0][:, 1])
@@ -1370,7 +1384,7 @@ class FeatureRepMix(_BaseComposition, TransformerMixin):
         self : object
             Returns self.
         '''
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts = get_ts_parts(X)
         self.f_labels = []
 
         # calculated features (prefix with the FeatureRep name and correct the index)
@@ -1426,7 +1440,7 @@ class FeatureRepMix(_BaseComposition, TransformerMixin):
         '''
         self._validate()
 
-        Xt, Xc = get_ts_data_parts(X)
+        Xt, Xc, ts = get_ts_parts(X)
         check_array(Xt, dtype='numeric', ensure_2d=False, allow_nd=True)
 
         # calculated features
@@ -1516,11 +1530,11 @@ class FunctionTransformer(BaseEstimator, TransformerMixin):
         if self.func is None:
             return X
         else:
-            Xt, Xc = get_ts_data_parts(X)
+            Xt, Xc, ts = get_ts_parts(X)
             n_samples = len(Xt)
             Xt = self.func(Xt, **self.func_kwargs)
             if len(Xt) != n_samples:
                 raise ValueError("FunctionTransformer changes sample number (not supported).")
-            if Xc is not None:
-                Xt = TS_Data(Xt, Xc)
+            if isinstance(X, TS_Data):
+                Xt = TS_Data(Xt, Xc, ts)
             return Xt
